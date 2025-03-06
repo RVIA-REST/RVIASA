@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile, BadRequestException, ParseIntPipe, Res, HttpException, HttpStatus, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile, BadRequestException, ParseIntPipe, Res, HttpException, HttpStatus, UploadedFiles, Request } from '@nestjs/common';
 import * as fs from 'fs';
 import { Response } from 'express';
 import { diskStorage } from 'multer';
@@ -11,15 +11,9 @@ import { CreateFileDto, CreateApplicationDto } from './dto';
 
 import { ValidationInterceptor } from '../interceptors/validation-file/validation-file.interceptor';
 
-@Controller('applications')
+@Controller('RVIASA')
 export class ApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) { }
-
-  @Get()
-  findAll() {
-    const userId = 1; // Ajuste para enviar userId
-    return this.applicationsService.findAll(userId);
-  }
 
   @Post('git')
   @UseInterceptors(FileInterceptor('file', {
@@ -58,50 +52,74 @@ export class ApplicationsController {
   }
 
   @Post('files')
-  @UseInterceptors(FilesInterceptor('files', 2, {
-    fileFilter: fileFilterZip,
-    storage: diskStorage({
-      destination: (req, file, cb) => {
-        const dir = `/sysx/bito/projects`;
-        fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-      },
-      filename: fileNamerZip
-    })
-  }),
-  new ValidationInterceptor((dto: CreateFileDto) => true))
-  uploadFileZip(
-    @Body() createFileDto: CreateFileDto,
-    @UploadedFiles() files: Express.Multer.File[]
-  ) {
-    if (files.length === 0) {
-      throw new BadRequestException('No files uploaded');
-    }
+@UseInterceptors(FilesInterceptor('files', 2, {
+  fileFilter: fileFilterZip,
+  storage: diskStorage({
+    destination: (req, file, cb) => {
+      const dir = `/sysx/bito/projects`;
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: fileNamerZip
+  })
+}),
+new ValidationInterceptor((dto: CreateFileDto) => true))
+uploadFileZip(
+  @Body() createFileDto: CreateFileDto,
+  @UploadedFiles() files: Express.Multer.File[],
+  @Request() req
+) {
 
-    const zipOr7zFile = files.find(file => 
-      file.mimetype.includes('zip') || file.mimetype.includes('x-7z-compressed') || file.mimetype.includes('x-zip-compressed')
-    );
-    const pdfFile = files.find(file => file.mimetype.includes('pdf'));
+  const userId = createFileDto.idu_usuario || null;
 
-    if (!zipOr7zFile) {
-      throw new BadRequestException('Debe tener un archivo zip o 7z y un PDF');
-    }
-
-    return this.applicationsService.createFiles(createFileDto, zipOr7zFile, pdfFile);
+  if (!userId) {
+    throw new BadRequestException('El campo idu_usuario es obligatorio en el body.');
   }
-  
-  @Get('status/num-accion-2')
-  findAllWithNumAccionTwo() {
-  const userId = 1;  // 🔹 Aquí puedes cambiarlo si necesitas un userId dinámico
-  return this.applicationsService.findAllWithNumAccionTwo(userId);
+
+  if (files.length === 0) {
+    throw new BadRequestException('No files uploaded');
+  }
+
+  const zipOr7zFile = files.find(file => 
+    file.mimetype.includes('zip') || file.mimetype.includes('x-7z-compressed') || file.mimetype.includes('x-zip-compressed')
+  );
+  const pdfFile = files.find(file => file.mimetype.includes('pdf'));
+
+  if (!zipOr7zFile) {
+    throw new BadRequestException('Debe tener un archivo zip o 7z y un PDF');
+  }
+
+  return this.applicationsService.createFiles(createFileDto, zipOr7zFile, pdfFile, userId);
 }
 
-
-  @Get('zip/:id')
-  async findFileZip(
-    @Res() res: Response,
-    @Param('id') id: number
-  ) {
-    await this.applicationsService.getStaticFile7z(id, res);
+  
+  @Get()
+  findAllWithNumAccionTwo(@Request() req) {
+  
+      const user = req['user'];
+      const userId = user?.idu_usuario ? Number(user.idu_usuario) : null;
+      const userRol = user?.position?.idu_rol ? Number(user.position.idu_rol) : null;
+  
+  
+      return this.applicationsService.findAllWithNumAccionTwo(userId, userRol);
   }
+  
+  
+
+ @Get('application/:id')
+async findFileZip(
+  @Res() res: Response,
+  @Param('id') id: number,
+  @Body() body: { idu_usuario: number }
+) {
+  // Extraer `idu_usuario` del body
+  const userId = body?.idu_usuario || null;
+
+  if (!userId) {
+    throw new BadRequestException('El campo idu_usuario es obligatorio en el body.');
+  }
+
+  await this.applicationsService.getStaticFile7z(id, res, userId);
+}
+
 }

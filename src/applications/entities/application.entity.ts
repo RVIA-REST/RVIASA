@@ -1,11 +1,11 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { Applicationstatus } from '../../applicationstatus/entities/applicationstatus.entity';
 import { Sourcecode } from '../../sourcecode/entities/sourcecode.entity';
 import { Scan } from '../../scans/entities/scan.entity';
 import { IsNumber } from "class-validator";
 import { Type } from "class-transformer";
 import { Checkmarx } from "src/checkmarx/entities/checkmarx.entity";
-
+import { User } from "src/auth/entities/user.entity"; 
 
 @Entity('mae_aplicaciones')
 export class Application {
@@ -51,27 +51,21 @@ export class Application {
 
     @Column({ type: 'jsonb', default: { "1": false, "2": false, "3": false, "4": false } })
     opc_arquitectura: Record<string, boolean>;
-    // @CreateDateColumn({ type: 'timestamp' })
-    // created_at: Date;
-  
-    // @UpdateDateColumn({ type: 'timestamp' })
-    // updated_at: Date;
 
     @ManyToOne(
         () => Applicationstatus, applicationstatus => applicationstatus.application,
         { eager:true }
     )
     @JoinColumn({ name: 'clv_estatus' })
-    applicationstatus: Applicationstatus
+    applicationstatus: Applicationstatus;
 
     @ManyToOne(
         () => Sourcecode, sourcecode => sourcecode.application,
         { eager:true }
     )
     @JoinColumn({ name: 'idu_codigo_fuente' })
-    sourcecode: Sourcecode
+    sourcecode: Sourcecode;
 
-    
     @OneToMany(() => Scan, scan => scan.application)
     scans: Scan[];
 
@@ -84,4 +78,7 @@ export class Application {
     })
     idu_usuario: number;
 
+    @ManyToOne(() => User, (user) => user.application, { eager: true })
+    @JoinColumn({ name: 'idu_usuario' }) 
+    user: User;
 }

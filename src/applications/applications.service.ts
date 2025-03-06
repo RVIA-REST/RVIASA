@@ -268,7 +268,12 @@ export class ApplicationsService {
       await fsExtra.remove(tempZipPath);
     }
   }
-  async createFiles(createFileDto: CreateFileDto, zipFile: Express.Multer.File, pdfFile: Express.Multer.File | undefined) {
+  async createFiles(createFileDto: CreateFileDto, zipFile: Express.Multer.File, pdfFile: Express.Multer.File | undefined, userId: number) {
+    // 🔹 Validación de `idu_usuario`
+    const finalUserId = createFileDto.idu_usuario || userId; // Asegura que tenga un usuario asignado
+    if (!finalUserId) {
+        throw new BadRequestException("El campo 'idu_usuario' es obligatorio.");
+    }
 
     const obj = new addon.CRvia(this.crviaEnvironment);
     const iduProject = obj.createIDProject();
@@ -284,162 +289,137 @@ export class ApplicationsService {
     let rviaProcess: { isValidProcess:boolean, messageRVIA:string };
 
     try {
+        if( isSanitizacion  && !pdfFile ){
+            throw new BadRequestException("Es necesario subir el PDF");
+        }
 
-      if( isSanitizacion  && !pdfFile ){
-        throw new BadRequestException("Es necesario subir el PDF");
-      }
+        const estatu = await this.estatusService.findOne(2);
+        if (!estatu) throw new NotFoundException('Estatus no encontrado');
 
-      const estatu = await this.estatusService.findOne(2);
-      if (!estatu) throw new NotFoundException('Estatus no encontrado');
+        await fsExtra.ensureDir(tempFolderPath);
+        await fsExtra.move(zipFile.path, tempZipPath);
 
-      if( createFileDto.num_accion == 0 && !createFileDto.opc_arquitectura )
-        throw new BadRequestException("Es necesario seleccionar una opción de arquitectura");
+        // Verifica si el archivo se movió correctamente
+        const fileExists = await fsExtra.pathExists(tempZipPath);
+        if (!fileExists) {
+            throw new InternalServerErrorException(`El archivo no se movió correctamente a ${tempZipPath}`);
+        }
 
-      await fsExtra.ensureDir(tempFolderPath);
-      await fsExtra.move(zipFile.path, tempZipPath);
+        try {
+            let extractedFolders: string[] = [];
+            if (zipFile.mimetype === 'application/zip' || zipFile.mimetype === 'application/x-zip-compressed') {
+                await unzipper.Open.file(tempZipPath)
+                    .then(async (directory) => {
+                        await fsExtra.remove(repoFolderPath);
+                        await fsExtra.ensureDir(repoFolderPath);
+                        await directory.extract({ path: repoFolderPath });
+                        extractedFolders = await fsExtra.readdir(repoFolderPath);
+                    })
+                    .catch(error => {
+                        throw new InternalServerErrorException(`Error al descomprimir el archivo .zip: ${error.message}`);
+                    });
+            } else if (zipFile.mimetype === 'application/x-7z-compressed') {
+                await new Promise<void>((resolve, reject) => {
+                    seven.unpack(tempZipPath, repoFolderPath, (err) => {
+                        if (err) {
+                            return reject(new InternalServerErrorException(`Error al descomprimir el archivo .7z: ${err.message}`));
+                        }
+                        resolve();
+                    });
+                });
+                extractedFolders = await fsExtra.readdir(repoFolderPath);
+            } else {
+                throw new UnsupportedMediaTypeException('Formato de archivo no soportado');
+            }
+        } catch (error) {
+            throw new InternalServerErrorException(`Error al descomprimir el archivo: ${error.message}`);
+        }
 
-      // Verifica si el archivo se movió correctamente
-      const fileExists = await fsExtra.pathExists(tempZipPath);
-      if (!fileExists) {
-        throw new InternalServerErrorException(`El archivo no se movió correctamente a ${tempZipPath}`);
-      }
+        // Crear el registro de código fuente
+        const sourcecode = await this.sourcecodeService.create({
+            nom_codigo_fuente: this.encryptionService.encrypt(`${iduProject}_${nameApplication}.${ tempExtension[tempExtension.length-1] }`),
+            nom_directorio: this.encryptionService.encrypt(repoFolderPath),
+        });
 
-      try {
-        let extractedFolders: string[] = [];
-        if (zipFile.mimetype === 'application/zip' || zipFile.mimetype === 'application/x-zip-compressed') {
-          // Descomprimir archivo .zip
-          await unzipper.Open.file(tempZipPath)
-            .then(async (directory) => {
-              await fsExtra.remove(repoFolderPath);
-              await fsExtra.ensureDir(repoFolderPath);
-              await directory.extract({ path: repoFolderPath });
-              extractedFolders = await fsExtra.readdir(repoFolderPath);
-            })
-            .catch(error => {
-              throw new InternalServerErrorException(`Error al descomprimir el archivo .zip: ${error.message}`);
-            });
-        } else if (zipFile.mimetype === 'application/x-7z-compressed') {
-          // Descomprimir archivo .7z
-          await new Promise<void>((resolve, reject) => {
-            seven.unpack(tempZipPath, repoFolderPath, (err) => {
-              if (err) {
-                return reject(new InternalServerErrorException(`Error al descomprimir el archivo .7z: ${err.message}`));
-              }
-              resolve();
-            });
-          });
-          extractedFolders = await fsExtra.readdir(repoFolderPath);
+        // Crear el registro de la aplicación
+        const application = new Application();
+        application.nom_aplicacion = this.encryptionService.encrypt(nameApplication);
+        application.idu_proyecto = iduProject;
+        application.num_accion = createFileDto.num_accion;
+        application.opc_lenguaje = createFileDto.opc_lenguaje;
+        application.applicationstatus = estatu;
+        application.sourcecode = sourcecode;
+        application.idu_usuario = finalUserId; // 🔹 Se asigna `idu_usuario` del DTO o del parámetro
+
+        await this.applicationRepository.save(application);
+
+        // Renombrar el archivo .zip o .7z con el id y nombre de la aplicación
+        const newZipFileName = `${application.idu_proyecto}_${nameApplication}.${ tempExtension[tempExtension.length-1] }`;
+        const newZipFilePath = join(zipFile.destination, newZipFileName);
+
+        // Verifica si el archivo existe antes de renombrarlo
+        const tempZipExists = await fsExtra.pathExists(tempZipPath);
+        if (tempZipExists) {
+            await fsExtra.rename(tempZipPath, newZipFilePath);
         } else {
-          throw new UnsupportedMediaTypeException('Formato de archivo no soportado');
+            throw new InternalServerErrorException(`El archivo a renombrar no existe: ${tempZipPath}`);
         }
-        // if (extractedFolders.length === 1 && (await fsExtra.stat(join(repoFolderPath, extractedFolders[0]))).isDirectory()) {
-        //   const singleFolderPath = join(repoFolderPath, extractedFolders[0]);
-        //   const filesInside = await fsExtra.readdir(singleFolderPath);
-        //   for (const file of filesInside) {
-        //       await fsExtra.move(join(singleFolderPath, file), join(repoFolderPath, file), { overwrite: true });
-        //   }
-        //   await fsExtra.remove(singleFolderPath);
-        // }
-      } catch (error) {
-        throw new InternalServerErrorException(`Error al descomprimir el archivo: ${error.message}`);
-      }
 
-      // Crear el registro de código fuente
-      const sourcecode = await this.sourcecodeService.create({
-        nom_codigo_fuente: this.encryptionService.encrypt(`${iduProject}_${nameApplication}.${ tempExtension[tempExtension.length-1] }`),
-        nom_directorio: this.encryptionService.encrypt(repoFolderPath),
-      });
-      const opciones = createFileDto.opc_arquitectura;
-      // Crear el registro de la aplicación
-      const application = new Application();
-      application.nom_aplicacion = this.encryptionService.encrypt(nameApplication);
-      application.idu_proyecto = iduProject;
-      application.num_accion = createFileDto.num_accion;
-      application.opc_arquitectura = createFileDto.opc_arquitectura || {"1": false, "2": false, "3": false, "4": false};
-      application.opc_lenguaje = createFileDto.opc_lenguaje;
-      // Array.isArray(aplicacion.opc_arquitectura) && aplicacion.opc_arquitectura.length > 1 ? aplicacion.opc_arquitectura[1]
-      application.opc_estatus_doc = opciones['1'] ? 2 : 0;
-      application.opc_estatus_doc_code = opciones['2'] ? 2 : 0;
-      application.opc_estatus_caso = opciones['3'] ? 2 : 0;
-      application.opc_estatus_calificar = opciones['4'] ? 2 : 0;
-      application.applicationstatus = estatu;
-      application.sourcecode = sourcecode;
-      application.idu_usuario = 1;
+        await fsExtra.remove(tempFolderPath);
 
-      await this.applicationRepository.save(application);
+        // Procesar el archivo PDF (si existe)
+        if (pdfFile) {
+            const pdfFileRename = await this.moveAndRenamePdfFile(pdfFile, repoFolderPath, nameApplication, iduProject);
 
-      
-      // Renombrar el archivo .zip o .7z con el id y nombre de la aplicación
-      const newZipFileName = `${application.idu_proyecto}_${nameApplication}.${ tempExtension[tempExtension.length-1] }`;
-      const newZipFilePath = join(zipFile.destination, newZipFileName);
+            if (isSanitizacion) {
+                dataCheckmarx = await this.checkmarxService.callPython(application.nom_aplicacion, pdfFileRename, application);
 
-      // Verifica si el archivo existe antes de renombrarlo
-      const tempZipExists = await fsExtra.pathExists(tempZipPath);
-      if (tempZipExists) {
-        await fsExtra.rename(tempZipPath, newZipFilePath);
-      } else {
-        throw new InternalServerErrorException(`El archivo a renombrar no existe: ${tempZipPath}`);
-      }
+                if (dataCheckmarx.isValid) {
+                    const scan = new Scan();
+                    scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
+                    scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
+                    scan.application = application;
+                    await this.scanRepository.save(scan);
 
-      await fsExtra.remove(tempFolderPath);
+                    rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
+                } else {
+                    await fsExtra.remove(join(repoFolderPath, pdfFileRename));
+                }
+            }
 
-      // Procesar el archivo PDF (si existe)
-      if (pdfFile) {
-        const pdfFileRename = await this.moveAndRenamePdfFile(pdfFile, repoFolderPath, nameApplication, iduProject);
+            if (createFileDto.num_accion != 2) {
+                const scan = new Scan();
+                scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
+                scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
+                scan.application = application;
+                await this.scanRepository.save(scan);
+            }
+        }
 
-        if (isSanitizacion) {
-          dataCheckmarx = await this.checkmarxService.callPython(application.nom_aplicacion, pdfFileRename, application);
-
-          if (dataCheckmarx.isValid) {
-            const scan = new Scan();
-            scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
-            scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
-            scan.application = application;
-            await this.scanRepository.save(scan);
-
+        if( createFileDto.num_accion != 2 ){
             rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
-
-          } else {
-            await fsExtra.remove(join(repoFolderPath, pdfFileRename));
-          }
         }
 
-        if (createFileDto.num_accion != 2) {
-          const scan = new Scan();
-          scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
-          scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
-          scan.application = application;
-          await this.scanRepository.save(scan);
-        }
-      }
+        application.nom_aplicacion = this.encryptionService.decrypt(application.nom_aplicacion);
 
-      if( createFileDto.num_accion != 2 ){
-        rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
-      }
-
-      application.nom_aplicacion = this.encryptionService.decrypt(application.nom_aplicacion);
-
-      return {
-        application,
-        checkmarx: isSanitizacion && pdfFile ? dataCheckmarx.checkmarx : [],
-        esSanitizacion: isSanitizacion,
-        rviaProcess
-      };
+        return {
+            rviaProcess
+        };
 
     } catch (error) {
-      console.error('Error al procesar el archivo:', error);
-      if (pdfFile) {
-        await fsExtra.remove(pdfFile.path);
-      }
+        console.error('Error al procesar el archivo:', error);
+        if (pdfFile) {
+            await fsExtra.remove(pdfFile.path);
+        }
 
-      if (zipFile && zipFile.path) {
-        await fsExtra.remove(tempZipPath);
-        await fsExtra.remove(tempFolderPath);
-      }
-      this.handleDBExceptions(error);
-      throw error;
+        if (zipFile && zipFile.path) {
+            await fsExtra.remove(tempZipPath);
+            await fsExtra.remove(tempFolderPath);
+        }
+        this.handleDBExceptions(error);
+        throw error;
     }
-  }
+}
   async update(id: number, estatusId: number) {
     try {
       const application = await this.applicationRepository.findOne({
@@ -460,69 +440,81 @@ export class ApplicationsService {
       this.handleDBExceptions(error);
     }
   }
-  async findAllWithNumAccionTwo(userId: number) {
+  async findAllWithNumAccionTwo(userId: number, userRol: number) {
     try {
-      const queryBuilder = this.applicationRepository.createQueryBuilder('application')
-        .leftJoinAndSelect('application.checkmarx', 'checkmarx')
-        .leftJoinAndSelect('application.applicationstatus', 'applicationstatus')
-        .leftJoinAndSelect('application.sourcecode', 'sourcecode')
-        .where('application.idu_usuario = :userId', { userId })
-        .andWhere('application.num_accion = :numAccion', { numAccion: 2 })  
-        .orderBy('application.fec_creacion', 'ASC');
-  
-      const aplicaciones = await queryBuilder.getMany();
-  
-      aplicaciones.forEach((aplicacion, index) => {
-        aplicacion.nom_aplicacion = this.encryptionService.decrypt(aplicacion.nom_aplicacion);
-        
-        if (aplicacion.applicationstatus) {
-          aplicacion.applicationstatus.des_estatus_aplicacion = this.encryptionService.decrypt(aplicacion.applicationstatus.des_estatus_aplicacion);
+        console.log(`🔍 Ejecutando findAllWithNumAccionTwo - userId: ${userId}, userRol: ${userRol}`);
+
+        let queryBuilder = this.applicationRepository.createQueryBuilder('application')
+            .leftJoinAndSelect('application.applicationstatus', 'applicationstatus')
+            .leftJoinAndSelect('application.user', 'user') 
+            .leftJoinAndSelect('user.position', 'position') 
+            .where('application.num_accion = :numAccion', { numAccion: 2 })
+            .orderBy('application.fec_creacion', 'ASC');
+
+        if (userRol === 4) {
+
+            return [];
         }
-  
-        if (aplicacion.sourcecode) {
-          aplicacion.sourcecode.nom_codigo_fuente = this.encryptionService.decrypt(aplicacion.sourcecode.nom_codigo_fuente);
-          aplicacion.sourcecode.nom_directorio = this.encryptionService.decrypt(aplicacion.sourcecode.nom_directorio);
+
+        if (userRol !== 1) {
+            console.log(`🔒 Aplicando filtro: Solo aplicaciones del usuario ${userId}`);
+            queryBuilder.andWhere('application.idu_usuario = :userId', { userId });
         }
-  
-        (aplicacion as any).sequentialId = index + 1;
-  
-        if (aplicacion.checkmarx && aplicacion.checkmarx.length > 0) {
-          aplicacion.checkmarx.forEach(checkmarx => {
-            checkmarx.nom_checkmarx = this.encryptionService.decrypt(checkmarx.nom_checkmarx);
-          });
-        }
-      });
-  
-      return aplicaciones;
+
+        const aplicaciones = await queryBuilder.getMany();
+        return aplicaciones.map(aplicacion => ({
+            idu_aplicacion: aplicacion.idu_aplicacion,
+            idu_proyecto: aplicacion.idu_proyecto,
+            nom_aplicacion: this.encryptionService.decrypt(aplicacion.nom_aplicacion),
+            idu_usuario: aplicacion.idu_usuario,
+            num_accion: aplicacion.num_accion,
+            opc_arquitectura: aplicacion.opc_arquitectura,
+            clv_estatus: aplicacion.applicationstatus ? aplicacion.applicationstatus.idu_estatus_aplicacion : null,
+            opc_lenguaje: aplicacion.opc_lenguaje,
+            opc_estatus_doc: aplicacion.opc_estatus_doc || 0,
+            opc_estatus_doc_code: aplicacion.opc_estatus_doc_code || 0,
+            opc_estatus_caso: aplicacion.opc_estatus_caso || 0,
+            opc_estatus_calificar: aplicacion.opc_estatus_calificar || 0,
+            user_rol: aplicacion.user?.position?.idu_rol || null
+        }));
+
     } catch (error) {
-      this.handleDBExceptions(error);
+        this.handleDBExceptions(error);
     }
-  }
-  
+}
 
-  async getStaticFile7z(id: number, response): Promise<void> {
-    const application = await this.applicationRepository.findOne({
-      where: { idu_aplicacion: id },
+
+
+async getStaticFile7z(id: number, response, idu_usuario: number): Promise<void> {
+
+  // 🔹 Validación de `idu_usuario`
+  if (!idu_usuario) {
+      throw new BadRequestException("El campo 'idu_usuario' es obligatorio.");
+  }
+
+  const application = await this.applicationRepository.findOne({
+      where: { idu_aplicacion: id, idu_usuario: idu_usuario }, // 🔹 Se filtra por `idu_usuario`
       relations: ['applicationstatus', 'scans'],
-    });
+  });
 
-    if (!application) throw new NotFoundException(`Aplicación con ID ${id} no encontrada`);
+  if (!application) throw new NotFoundException(`Aplicación con ID ${id} no encontrada o no pertenece al usuario ${idu_usuario}`);
 
-    const decryptedAppName = this.encryptionService.decrypt(application.nom_aplicacion);
-    const filePath = join(this.downloadPath, `${application.idu_proyecto}_${decryptedAppName}.7z`);
+  const decryptedAppName = this.encryptionService.decrypt(application.nom_aplicacion);
+  const filePath = join(this.downloadPath, `${application.idu_proyecto}_${decryptedAppName}.7z`);
 
-    if (!existsSync(filePath)) throw new BadRequestException(`No se encontró el archivo ${application.idu_proyecto}_${decryptedAppName}.7z`);
+  if (!existsSync(filePath)) throw new BadRequestException(`No se encontró el archivo ${application.idu_proyecto}_${decryptedAppName}.7z`);
 
-    response.setHeader('Content-Type', 'application/x-7z-compressed');
-    response.setHeader('Content-Disposition', `attachment; filename="${application.idu_proyecto}_${decryptedAppName}.7z"; filename*=UTF-8''${encodeURIComponent(application.idu_proyecto + '_' + decryptedAppName)}.7z`);
+  response.setHeader('Content-Type', 'application/x-7z-compressed');
+  response.setHeader('Content-Disposition', `attachment; filename="${application.idu_proyecto}_${decryptedAppName}.7z"; filename*=UTF-8''${encodeURIComponent(application.idu_proyecto + '_' + decryptedAppName)}.7z`);
 
-    const readStream = createReadStream(filePath);
-    readStream.pipe(response);
+  const readStream = createReadStream(filePath);
+  readStream.pipe(response);
 
-    readStream.on('error', (err) => {
+  readStream.on('error', (err) => {
       throw new BadRequestException(`Error al leer el archivo: ${err.message}`);
-    });
-  }
+  });
+}
+
 
   private parseGitHubURL(url: string): { repoName: string, userName: string } | null {
     const regex = /github\.com\/([^\/]+)\/([^\/]+)\.git$/;

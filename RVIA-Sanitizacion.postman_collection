@@ -1,0 +1,133 @@
+{
+	"info": {
+		"_postman_id": "bc8983af-cb01-4af0-878b-07a861186cde",
+		"name": "RVIA-Sanitizacion",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "25955169"
+	},
+	"item": [
+		{
+			"name": "Subir proyecto zip/7z",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "num_accion",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": "/C:/Users/Ilse/Downloads/rvia-launcher (1).zip"
+						},
+						{
+							"key": "files",
+							"type": "file",
+							"src": "/C:/Users/Ilse/Downloads/exhibicion.pdf"
+						},
+						{
+							"key": "idu_usuario",
+							"value": "2",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:3102/RVIASA/files",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3102",
+					"path": [
+						"RVIASA",
+						"files"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Estatus todas las aplicaciones a sanitizar",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "idu_usuario",
+							"value": "2",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:3102/RVIASA",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3102",
+					"path": [
+						"RVIASA"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Descarga proyecto",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"idu_usuario\": 1\r\n}\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3102/RVIASA/application/7",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3102",
+					"path": [
+						"RVIASA",
+						"application",
+						"7"
+					],
+					"query": [
+						{
+							"key": "idu_proyecto",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
