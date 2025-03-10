@@ -88,186 +88,186 @@ export class ApplicationsService {
     return aplicacion;
   }
 
-  async createGitFile(createApplicationDto: CreateApplicationDto, userId: number, file?) {
-    try {
-      const repoInfo = this.parseGitHubURL(createApplicationDto.url);
-      if (!repoInfo) {
-        throw new BadRequestException('Invalid GitHub repository URL');
-      }
+  // async createGitFile(createApplicationDto: CreateApplicationDto, userId: number, file?) {
+  //   try {
+  //     const repoInfo = this.parseGitHubURL(createApplicationDto.url);
+  //     if (!repoInfo) {
+  //       throw new BadRequestException('Invalid GitHub repository URL');
+  //     }
 
-      return await this.processRepository(repoInfo.repoName, repoInfo.userName, file, createApplicationDto.num_accion, createApplicationDto.opc_lenguaje, 'GitHub', createApplicationDto.opc_arquitectura);
-    } catch (error) {
-      this.handleDBExceptions(error);
-    }
-  }
+  //     return await this.processRepository(repoInfo.repoName, repoInfo.userName, file, createApplicationDto.num_accion, createApplicationDto.opc_lenguaje, 'GitHub', createApplicationDto.opc_arquitectura);
+  //   } catch (error) {
+  //     this.handleDBExceptions(error);
+  //   }
+  // }
 
-  async createGitLabFile(createApplicationDto: CreateApplicationDto, userId: number, file?) {
-    try {
-      const repoInfo = this.getRepoInfo(createApplicationDto.url);
-      if (!repoInfo) {
-        throw new BadRequestException('Invalid GitLab repository URL');
-      }
+  // async createGitLabFile(createApplicationDto: CreateApplicationDto, userId: number, file?) {
+  //   try {
+  //     const repoInfo = this.getRepoInfo(createApplicationDto.url);
+  //     if (!repoInfo) {
+  //       throw new BadRequestException('Invalid GitLab repository URL');
+  //     }
 
-      return await this.processRepository(repoInfo.repoName, `${repoInfo.userName}/${repoInfo.groupName}`, file, createApplicationDto.num_accion, createApplicationDto.opc_lenguaje, 'GitLab', createApplicationDto.opc_arquitectura);
-    } catch (error) {
-      this.handleDBExceptions(error);
-    }
-  }
+  //     return await this.processRepository(repoInfo.repoName, `${repoInfo.userName}/${repoInfo.groupName}`, file, createApplicationDto.num_accion, createApplicationDto.opc_lenguaje, 'GitLab', createApplicationDto.opc_arquitectura);
+  //   } catch (error) {
+  //     this.handleDBExceptions(error);
+  //   }
+  // }
 
-  private async processRepository(repoName: string, repoUserName: string, file, numAccion: number, opcLenguaje: number, platform: string, opcArquitectura) {
+  // private async processRepository(repoName: string, repoUserName: string, file, numAccion: number, opcLenguaje: number, platform: string, opcArquitectura) {
 
-    const obj = new addon.CRvia(this.crviaEnvironment);
-    const iduProject = obj.createIDProject();
+  //   const obj = new addon.CRvia(this.crviaEnvironment);
+  //   const iduProject = obj.createIDProject();
 
-    const streamPipeline = promisify(pipeline);
-    const uniqueTempFolderName = `temp-${uuid()}`;
-    const tempFolderPath = join(this.downloadPath, uniqueTempFolderName);
-    const repoFolderPath = join(this.downloadPath, `${iduProject}_${repoName}`);
+  //   const streamPipeline = promisify(pipeline);
+  //   const uniqueTempFolderName = `temp-${uuid()}`;
+  //   const tempFolderPath = join(this.downloadPath, uniqueTempFolderName);
+  //   const repoFolderPath = join(this.downloadPath, `${iduProject}_${repoName}`);
 
 
-    const isSanitizacion = numAccion == 2 ? true : false;
-    let dataCheckmarx: { message: string; error?: string; isValid?: boolean; checkmarx?: any };
-    let rviaProcess: { isValidProcess:boolean, messageRVIA:string };
+  //   const isSanitizacion = numAccion == 2 ? true : false;
+  //   let dataCheckmarx: { message: string; error?: string; isValid?: boolean; checkmarx?: any };
+  //   let rviaProcess: { isValidProcess:boolean, messageRVIA:string };
 
-    if( isSanitizacion  && !file ){
-      throw new BadRequestException("Es necesario subir el PDF");
-    }
+  //   if( isSanitizacion  && !file ){
+  //     throw new BadRequestException("Es necesario subir el PDF");
+  //   }
 
-    if( numAccion == 0 && !opcArquitectura )
-      throw new BadRequestException("Es necesario seleccionar una opción de arquitectura");
+  //   if( numAccion == 0 && !opcArquitectura )
+  //     throw new BadRequestException("Es necesario seleccionar una opción de arquitectura");
 
-    await fsExtra.ensureDir(tempFolderPath);
+  //   await fsExtra.ensureDir(tempFolderPath);
 
-    const branches = ['main', 'master'];
-    let zipUrl: string | null = null;
+  //   const branches = ['main', 'master'];
+  //   let zipUrl: string | null = null;
 
-    for (const branch of branches) {
-      const potentialUrl = platform === 'GitHub'
-        ? `https://github.com/${repoUserName}/${repoName}/archive/refs/heads/${branch}.zip`
-        : `https://gitlab.com/${repoUserName}/${repoName}/-/archive/${branch}/${repoName}-${branch}.zip`;
+  //   for (const branch of branches) {
+  //     const potentialUrl = platform === 'GitHub'
+  //       ? `https://github.com/${repoUserName}/${repoName}/archive/refs/heads/${branch}.zip`
+  //       : `https://gitlab.com/${repoUserName}/${repoName}/-/archive/${branch}/${repoName}-${branch}.zip`;
 
-      try {
-        await lastValueFrom(this.httpService.head(potentialUrl));
-        zipUrl = potentialUrl;
-        break;
-      } catch (error) {
-        continue;
-      }
-    }
+  //     try {
+  //       await lastValueFrom(this.httpService.head(potentialUrl));
+  //       zipUrl = potentialUrl;
+  //       break;
+  //     } catch (error) {
+  //       continue;
+  //     }
+  //   }
 
-    if (!zipUrl) {
-      await fsExtra.remove(tempFolderPath);
-      await fsExtra.remove(file.path);
-      throw new InternalServerErrorException('No se encontró ninguna rama válida (main o master)');
-    }
+  //   if (!zipUrl) {
+  //     await fsExtra.remove(tempFolderPath);
+  //     await fsExtra.remove(file.path);
+  //     throw new InternalServerErrorException('No se encontró ninguna rama válida (main o master)');
+  //   }
 
-    const response = await lastValueFrom(
-      this.httpService.get(zipUrl, { responseType: 'stream' }).pipe(
-        catchError(() => {
-          fsExtra.remove(tempFolderPath);
+  //   const response = await lastValueFrom(
+  //     this.httpService.get(zipUrl, { responseType: 'stream' }).pipe(
+  //       catchError(() => {
+  //         fsExtra.remove(tempFolderPath);
 
-          throw new InternalServerErrorException('Error al descargar el repositorio');
-        }),
-      ),
-    );
+  //         throw new InternalServerErrorException('Error al descargar el repositorio');
+  //       }),
+  //     ),
+  //   );
 
-    const tempZipPath = join(tempFolderPath, `${repoName}.zip`);
-    const zipGit = join(this.downloadPath, `${iduProject}_${repoName}.zip`);
+  //   const tempZipPath = join(tempFolderPath, `${repoName}.zip`);
+  //   const zipGit = join(this.downloadPath, `${iduProject}_${repoName}.zip`);
    
 
-    try {
+  //   try {
 
-      await streamPipeline(response.data, createWriteStream(tempZipPath));
+  //     await streamPipeline(response.data, createWriteStream(tempZipPath));
 
-      await fsExtra.copy(tempZipPath, zipGit);
+  //     await fsExtra.copy(tempZipPath, zipGit);
 
-      await unzipper.Open.file(tempZipPath)
-        .then(d => d.extract({ path: tempFolderPath }))
-        .then(async () => {
-          // Obtener el nombre del directorio extraído
-          const extractedFolders = await fsExtra.readdir(tempFolderPath);
-          const extractedFolder = join(tempFolderPath, extractedFolders.find(folder => folder.includes(repoName)));
+  //     await unzipper.Open.file(tempZipPath)
+  //       .then(d => d.extract({ path: tempFolderPath }))
+  //       .then(async () => {
+  //         // Obtener el nombre del directorio extraído
+  //         const extractedFolders = await fsExtra.readdir(tempFolderPath);
+  //         const extractedFolder = join(tempFolderPath, extractedFolders.find(folder => folder.includes(repoName)));
 
-          await fsExtra.ensureDir(repoFolderPath);
-          await fsExtra.copy(extractedFolder, repoFolderPath);
-          await fsExtra.remove(tempZipPath);
-          await fsExtra.remove(tempFolderPath);
-        });
+  //         await fsExtra.ensureDir(repoFolderPath);
+  //         await fsExtra.copy(extractedFolder, repoFolderPath);
+  //         await fsExtra.remove(tempZipPath);
+  //         await fsExtra.remove(tempFolderPath);
+  //       });
 
-      const sourcecode = await this.sourcecodeService.create({
-        nom_codigo_fuente: this.encryptionService.encrypt(repoName),
-        nom_directorio: this.encryptionService.encrypt(repoFolderPath),
-      });
+  //     const sourcecode = await this.sourcecodeService.create({
+  //       nom_codigo_fuente: this.encryptionService.encrypt(repoName),
+  //       nom_directorio: this.encryptionService.encrypt(repoFolderPath),
+  //     });
 
-      const estatu = await this.estatusService.findOne(2);
-      const application = new Application();
-      application.nom_aplicacion = this.encryptionService.encrypt(repoName);
-      application.idu_proyecto = iduProject;
-      application.num_accion = numAccion;
-      application.opc_arquitectura = opcArquitectura || {"1": false, "2": false, "3": false, "4": false};
-      application.opc_lenguaje = opcLenguaje;
-      application.opc_estatus_doc = opcArquitectura['1'] ? 2 : 0;
-      application.opc_estatus_doc_code = opcArquitectura['2'] ? 2 : 0;
-      application.opc_estatus_caso = opcArquitectura['3'] ? 2 : 0;
-      application.opc_estatus_calificar = opcArquitectura['4'] ? 2 : 0;
-      application.applicationstatus = estatu;
-      application.sourcecode = sourcecode;
-      application.idu_usuario = 1;
+  //     const estatu = await this.estatusService.findOne(2);
+  //     const application = new Application();
+  //     application.nom_aplicacion = this.encryptionService.encrypt(repoName);
+  //     application.idu_proyecto = iduProject;
+  //     application.num_accion = numAccion;
+  //     application.opc_arquitectura = opcArquitectura || {"1": false, "2": false, "3": false, "4": false};
+  //     application.opc_lenguaje = opcLenguaje;
+  //     application.opc_estatus_doc = opcArquitectura['1'] ? 2 : 0;
+  //     application.opc_estatus_doc_code = opcArquitectura['2'] ? 2 : 0;
+  //     application.opc_estatus_caso = opcArquitectura['3'] ? 2 : 0;
+  //     application.opc_estatus_calificar = opcArquitectura['4'] ? 2 : 0;
+  //     application.applicationstatus = estatu;
+  //     application.sourcecode = sourcecode;
+  //     application.idu_usuario = 1;
 
-      await this.applicationRepository.save(application);
+  //     await this.applicationRepository.save(application);
 
-      if (file) {
+  //     if (file) {
 
-        const pdfFileRename = await this.moveAndRenamePdfFile(file, repoFolderPath, repoName, iduProject);
+  //       const pdfFileRename = await this.moveAndRenamePdfFile(file, repoFolderPath, repoName, iduProject);
 
-        if (isSanitizacion) {
-          dataCheckmarx = await this.checkmarxService.callPython(application.nom_aplicacion, pdfFileRename, application);
-          if (dataCheckmarx.isValid) {
-            const scan = new Scan();
-            scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
-            scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
-            scan.application = application;
-            await this.scanRepository.save(scan);
+  //       if (isSanitizacion) {
+  //         dataCheckmarx = await this.checkmarxService.callPython(application.nom_aplicacion, pdfFileRename, application);
+  //         if (dataCheckmarx.isValid) {
+  //           const scan = new Scan();
+  //           scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
+  //           scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
+  //           scan.application = application;
+  //           await this.scanRepository.save(scan);
 
-            rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
+  //           rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
 
-          } else {
-            await fsExtra.remove(join(repoFolderPath, pdfFileRename));
-          }
-        }
+  //         } else {
+  //           await fsExtra.remove(join(repoFolderPath, pdfFileRename));
+  //         }
+  //       }
 
-        if (numAccion != 2) {
-          const scan = new Scan();
-          scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
-          scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
-          scan.application = application;
-          await this.scanRepository.save(scan);
-        }
+  //       if (numAccion != 2) {
+  //         const scan = new Scan();
+  //         scan.nom_escaneo = this.encryptionService.encrypt(pdfFileRename);
+  //         scan.nom_directorio = this.encryptionService.encrypt(join(repoFolderPath, pdfFileRename));
+  //         scan.application = application;
+  //         await this.scanRepository.save(scan);
+  //       }
 
-      }
+  //     }
 
-      if( numAccion != 2 ){
-        rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
-      }
+  //     if( numAccion != 2 ){
+  //       rviaProcess = await this.rviaService.ApplicationInitProcess(application, obj);
+  //     }
 
-      application.nom_aplicacion = this.encryptionService.decrypt(application.nom_aplicacion);
+  //     application.nom_aplicacion = this.encryptionService.decrypt(application.nom_aplicacion);
 
-      return {
-        application,
-        checkmarx: isSanitizacion && file ? dataCheckmarx.checkmarx : [],
-        esSanitizacion: isSanitizacion,
-        rviaProcess
-      };
+  //     return {
+  //       application,
+  //       checkmarx: isSanitizacion && file ? dataCheckmarx.checkmarx : [],
+  //       esSanitizacion: isSanitizacion,
+  //       rviaProcess
+  //     };
 
-    } catch (error) {
-      await fsExtra.remove(repoFolderPath);
-      await fsExtra.remove(zipGit);
-      throw new InternalServerErrorException('Error al procesar el repositorio');
-    } finally {
-      await fsExtra.remove(tempFolderPath);
-      await fsExtra.remove(tempZipPath);
-    }
-  }
+  //   } catch (error) {
+  //     await fsExtra.remove(repoFolderPath);
+  //     await fsExtra.remove(zipGit);
+  //     throw new InternalServerErrorException('Error al procesar el repositorio');
+  //   } finally {
+  //     await fsExtra.remove(tempFolderPath);
+  //     await fsExtra.remove(tempZipPath);
+  //   }
+  // }
   async createFiles(createFileDto: CreateFileDto, zipFile: Express.Multer.File, pdfFile: Express.Multer.File | undefined, userId: number) {
     // 🔹 Validación de `idu_usuario`
     const finalUserId = createFileDto.idu_usuario || userId; // Asegura que tenga un usuario asignado
@@ -485,69 +485,96 @@ export class ApplicationsService {
 
 
 
-async getStaticFile7z(id: number, response, idu_usuario: number): Promise<void> {
-
+async getStaticFile7z(id: string | number, response, idu_usuario: number): Promise<void> {
   // 🔹 Validación de `idu_usuario`
   if (!idu_usuario) {
       throw new BadRequestException("El campo 'idu_usuario' es obligatorio.");
   }
 
-  const application = await this.applicationRepository.findOne({
-      where: { idu_aplicacion: id, idu_usuario: idu_usuario }, // 🔹 Se filtra por `idu_usuario`
-      relations: ['applicationstatus', 'scans'],
-  });
+  // 🔹 Convertir `id` a número si es un string
+  const applicationId = typeof id === "string" ? parseInt(id, 10) : id;
+  if (isNaN(applicationId)) {
+      throw new BadRequestException("El ID de la aplicación debe ser un número válido.");
+  }
 
-  if (!application) throw new NotFoundException(`Aplicación con ID ${id} no encontrada o no pertenece al usuario ${idu_usuario}`);
+  try {
+      // 🔹 Consulta a la base de datos con `num_accion: 1`
+      const application = await this.applicationRepository.findOne({
+          where: { idu_aplicacion: applicationId, idu_usuario: idu_usuario, num_accion: 1 }, // Se convirtió `id` a número
+          relations: ['applicationstatus'], // Se mantiene solo `applicationstatus`
+      });
 
-  const decryptedAppName = this.encryptionService.decrypt(application.nom_aplicacion);
-  const filePath = join(this.downloadPath, `${application.idu_proyecto}_${decryptedAppName}.7z`);
+      if (!application) {
+          throw new NotFoundException(`Aplicación con ID ${applicationId} no encontrada o no pertenece al usuario ${idu_usuario}`);
+      }
 
-  if (!existsSync(filePath)) throw new BadRequestException(`No se encontró el archivo ${application.idu_proyecto}_${decryptedAppName}.7z`);
+      const decryptedAppName = this.encryptionService.decrypt(application.nom_aplicacion);
+      const filePath = join(this.downloadPath, `${application.idu_proyecto}_${decryptedAppName}.7z`);
 
-  response.setHeader('Content-Type', 'application/x-7z-compressed');
-  response.setHeader('Content-Disposition', `attachment; filename="${application.idu_proyecto}_${decryptedAppName}.7z"; filename*=UTF-8''${encodeURIComponent(application.idu_proyecto + '_' + decryptedAppName)}.7z`);
+      if (!existsSync(filePath)) {
+          throw new BadRequestException(`No se encontró el archivo ${application.idu_proyecto}_${decryptedAppName}.7z`);
+      }
 
-  const readStream = createReadStream(filePath);
-  readStream.pipe(response);
+      response.setHeader('Content-Type', 'application/x-7z-compressed');
+      response.setHeader('Content-Disposition', `attachment; filename="${application.idu_proyecto}_${decryptedAppName}.7z"; filename*=UTF-8''${encodeURIComponent(application.idu_proyecto + '_' + decryptedAppName)}.7z`);
 
-  readStream.on('error', (err) => {
-      throw new BadRequestException(`Error al leer el archivo: ${err.message}`);
-  });
+      const readStream = createReadStream(filePath);
+      readStream.pipe(response);
+
+      readStream.on('error', (err) => {
+          throw new BadRequestException(`Error al leer el archivo: ${err.message}`);
+      });
+  } catch (error) {
+      this.handleDBExceptions(error);
+  }
+}
+
+// 🔹 Manejo de errores centralizado
+private handleDBExceptions(error: any) {
+  if (error.code === '23505') {
+      throw new BadRequestException(error.detail);
+  }
+  if (error.response) {
+      throw new BadRequestException(error.message);
+  }
+
+  this.logger.error(error);
+  throw new InternalServerErrorException('Unexpected error, check server logs');
 }
 
 
-  private parseGitHubURL(url: string): { repoName: string, userName: string } | null {
-    const regex = /github\.com\/([^\/]+)\/([^\/]+)\.git$/;
-    const match = url.match(regex);
-    if (match) {
-      return { userName: match[1], repoName: match[2] };
-    }
-    return null;
-  }
+  // private parseGitHubURL(url: string): { repoName: string, userName: string } | null {
+  //   const regex = /github\.com\/([^\/]+)\/([^\/]+)\.git$/;
+  //   const match = url.match(regex);
+  //   if (match) {
+  //     return { userName: match[1], repoName: match[2] };
+  //   }
+  //   return null;
+  // }
 
-  private getRepoInfo(url: string): { userName: string, groupName: string, repoName: string } | null {
-    try {
-      const { pathname } = new URL(url);
+  // private getRepoInfo(url: string): { userName: string, groupName: string, repoName: string } | null {
+  //   try {
+  //     const { pathname } = new URL(url);
 
-      const pathSegments = pathname.split('/').filter(segment => segment);
+  //     const pathSegments = pathname.split('/').filter(segment => segment);
 
-      if (pathSegments.length > 0 && pathSegments[pathSegments.length - 1].endsWith('.git')) {
-        const repoName = pathSegments.pop()!.replace('.git', '');
-        const groupName = pathSegments.pop()!;
-        const userName = pathSegments.join('/');
+  //     if (pathSegments.length > 0 && pathSegments[pathSegments.length - 1].endsWith('.git')) {
+  //       const repoName = pathSegments.pop()!.replace('.git', '');
+  //       const groupName = pathSegments.pop()!;
+  //       const userName = pathSegments.join('/');
 
-        return {
-          userName,
-          groupName,
-          repoName
-        };
-      }
-    } catch (error) {
-      console.error('Error parsing URL:', error);
-    }
+  //       return {
+  //         userName,
+  //         groupName,
+  //         repoName
+  //       };
+  //     }
+  //   } catch (error) {
+  //     console.error('Error parsing URL:', error);
+  //   }
 
-    return null;
-  }
+  //   return null;
+  // }
   private async moveAndRenamePdfFile(pdfFile: Express.Multer.File, repoFolderPath: string, project: string, idu_project: string): Promise<string> {
     const newPdfFileName = `checkmarx_${idu_project}_${project}.pdf`;
     const newPdfFilePath = join(repoFolderPath, newPdfFileName);
@@ -566,12 +593,5 @@ async getStaticFile7z(id: number, response, idu_usuario: number): Promise<void> 
       throw new InternalServerErrorException(`Error al mover y renombrar el archivo PDF: ${error.message}`);
     }
   }
-
-  private handleDBExceptions(error: any) {
-    if (error.code === '23505') throw new BadRequestException(error.detail);
-    if (error.response) throw new BadRequestException(error.message);
-    console.log(error)
-    this.logger.error(error);
-    throw new InternalServerErrorException('Unexpected error, check server logs');
+  
   }
-}

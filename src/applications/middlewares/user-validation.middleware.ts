@@ -7,7 +7,7 @@ export class UserValidationMiddleware implements NestMiddleware {
   constructor(private readonly authService: AuthService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
-    const { idu_usuario } = req.body;
+    const { idu_usuario } = req.query;
 
     // Validar que se envió el id_usuario
     if (!idu_usuario) {
@@ -15,7 +15,7 @@ export class UserValidationMiddleware implements NestMiddleware {
     }
 
     // Buscar usuario en la base de datos
-    const user = await this.authService.validateUser(idu_usuario);
+    const user = await this.authService.validateUser(+idu_usuario);
 
     // Si no existe, lanzar error de autenticación
     if (!user) {

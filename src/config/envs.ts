@@ -1,18 +1,19 @@
-import 'dotenv/config';
-
+import * as dotenv from 'dotenv';
 import * as joi from 'joi';
+import * as fs from 'fs';
 
-interface EnvVars {
-  DB_HOST: string;
-  DB_USERNAME: string;
-  DB_PASSWORD: string;
-  DB_NAME: string;
-  DB_PORT: number;
-  PORT: number;
-
-  JWT_SECRET: string;
-  SECRET_KEY: string;
+// Asegurar que el archivo .env existe antes de cargarlo
+const envPath = '/sysx/progs/rvia/cnf/.env';
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log('Archivo .env cargado correctamente.');
+} else {
+  console.error(`Error: No se encontró el archivo .env en ${envPath}`);
+  process.exit(1);
 }
+
+// Mostrar las variables de entorno después de la carga
+console.log('Variables después de dotenv.config:', process.env);
 
 const envsSchema = joi.object({
   DB_HOST: joi.string().required(),
@@ -23,29 +24,21 @@ const envsSchema = joi.object({
   PORT: joi.number().required(),
   JWT_SECRET: joi.string().required(),
   SECRET_KEY: joi.string().required(),
-})
-.unknown(true);
+}).unknown(true);
 
-const { error, value } = envsSchema.validate({
-  ...process.env,
-});
+const { error, value } = envsSchema.validate({ ...process.env });
 
-
-if ( error ) {
-  throw new Error(`Config validation error: ${ error.message }`);
+if (error) {
+  throw new Error(`Config validation error: ${error.message}`);
 }
 
-const envVars:EnvVars = value;
-
-
 export const envs = {
-  dbHost: envVars.DB_HOST,
-  dbUsername: envVars.DB_USERNAME,
-  dbPassword: envVars.DB_PASSWORD,
-  dbName: envVars.DB_NAME,
-  dbPort: envVars.DB_PORT,
-  port: envVars.PORT,
-
-  jwtSecret: envVars.JWT_SECRET,
-  secretKey: envVars.SECRET_KEY,
+  dbHost: value.DB_HOST,
+  dbUsername: value.DB_USERNAME,
+  dbPassword: value.DB_PASSWORD,
+  dbName: value.DB_NAME,
+  dbPort: value.DB_PORT,
+  port: value.PORT,
+  jwtSecret: value.JWT_SECRET,
+  secretKey: value.SECRET_KEY,
 };

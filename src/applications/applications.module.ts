@@ -41,6 +41,7 @@ export class ApplicationsModule implements NestModule {
         { path: 'rviasa', method: RequestMethod.GET },
         // { path: 'rviauser/:id', method: RequestMethod.PATCH  },
         // { path: 'rviauser/:id', method: RequestMethod.DELETE  }
+        { path: 'rviasa/application/:id', method: RequestMethod.GET  }
       ); 
   }
 

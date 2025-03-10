@@ -16,6 +16,7 @@ export class CreateFileDto {
     opc_lenguaje: number = 0;
     
     @IsNumber()
+    @IsOptional()
     @Transform(({ value }) => parseInt(value, 10))
     idu_usuario: number;
 
